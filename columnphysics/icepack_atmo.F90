@@ -318,151 +318,20 @@
 
          ! first pass of the iteration without stability limiter
          !------------------------------------------------------------
-         ! first estimate of Z/L and ustar, tstar and qstar
-         !------------------------------------------------------------
+         call flux_iteration_with_stability(.false., &
+                                            ustar, tstar, qstar, &
+                                            rd, rh, re, &
+                                            hols, psixh, stable)
 
-         ! neutral coefficients, z/L = 0.0
-         rhn = rdn
-         ren = rdn
-
-         ! ustar,tstar,qstar
-         ustar = rdn * vmag
-         tstar = rhn * delt
-         qstar = ren * delq
-
-         !------------------------------------------------------------
-         ! iterate to converge on Z/L, ustar, tstar and qstar
-         !------------------------------------------------------------
-
-         ustar_prev = ustar
-         tstar_prev = tstar
-         qstar_prev = qstar
-         ustar_next = c2 * ustar
-         tstar_next = c2 * tstar
-         qstar_next = c2 * qstar
-
-         k = 1
-         do while ( sqrt(((ustar_next - ustar_prev)/(ustar_prev + 1.e-3_dbl_kind))**2 + &
-                         ((tstar_next - tstar_prev)/(tstar_prev + 1.e-5_dbl_kind))**2 + &
-                         ((qstar_next - qstar_prev)/(qstar_prev + 1.e-8_dbl_kind))**2) > atmiter_conv)
-            if (k > natmiter) then
-               call icepack_warnings_add('atmo_boundary_layer: flux iteration did not converge')
-               exit
-            endif
-            k = k + 1
-            ustar_prev = ustar
-            tstar_prev = tstar
-            qstar_prev = qstar
-
-            ! compute stability & evaluate all stability functions
-            holm = compute_stability_parameter(zlvl , thva , &
-                                             ustar, tstar, &
-                                             qstar, Qa, &
-                                             .false.)
-            if (present(zlvs)) then
-               hols = compute_stability_parameter(zlvs , thva , &
-                                                ustar, tstar, &
-                                                qstar, Qa, &
-                                                .false.)
-            else
-               hols = holm
-            endif
-
-            call compute_stability_function('momentum', holm, stable, psimh, use_ice_atm_flux_reg, &
-                                            ice_atm_flux_eps)
-            call compute_stability_function('scalar'  , hols, stable, psixh, use_ice_atm_flux_reg, &
-                                            ice_atm_flux_eps)
-
-            ! shift all coeffs to measurement height and stability
-            rd = rdn / (c1+rdn/vonkar*(alzm-psimh))
-            rh = rhn / (c1+rhn/vonkar*(alzs-psixh))
-            re = ren / (c1+ren/vonkar*(alzs-psixh))
-
-            ! update ustar, tstar, qstar using updated, shifted coeffs
-            ustar = ice_atm_flux_damping * rd * vmag + (c1 - ice_atm_flux_damping) * ustar_prev
-            tstar = ice_atm_flux_damping * rh * delt + (c1 - ice_atm_flux_damping) * tstar_prev
-            qstar = ice_atm_flux_damping * re * delq + (c1 - ice_atm_flux_damping) * qstar_prev
-
-            ustar_next = rd * vmag
-            tstar_next = rh * delt
-            qstar_next = re * delq
-
-         enddo                     ! end iteration
-
-         ! next, check if computer scaling parameters are near zero. if so, this suggests that the
-         ! system of equations has no solution and the stability limiter is necessary to 
+         ! next, check if computed scaling parameters are near zero. if so, this suggests that the
+         ! system of equations has no solution and the stability limiter is necessary
          if (abs(ustar) < 1.e-12_dbl_kind .or. abs(tstar) < 1.e-12_dbl_kind .or. abs(qstar) < 1.e-12_dbl_kind) then
             ! second pass of iteration with stability limiter
             !------------------------------------------------------------
-            ! first estimate of Z/L and ustar, tstar and qstar
-            !------------------------------------------------------------
-
-            ! neutral coefficients, z/L = 0.0
-            rhn = rdn
-            ren = rdn
-
-            ! ustar,tstar,qstar
-            ustar = rdn * vmag
-            tstar = rhn * delt
-            qstar = ren * delq
-
-            !------------------------------------------------------------
-            ! iterate to converge on Z/L, ustar, tstar and qstar
-            !------------------------------------------------------------
-
-            ustar_prev = ustar
-            tstar_prev = tstar
-            qstar_prev = qstar
-            ustar_next = c2 * ustar
-            tstar_next = c2 * tstar
-            qstar_next = c2 * qstar
-
-            k = 1
-            do while ( sqrt(((ustar_next - ustar_prev)/(ustar_prev + 1.e-3_dbl_kind))**2 + &
-                           ((tstar_next - tstar_prev)/(tstar_prev + 1.e-5_dbl_kind))**2 + &
-                           ((qstar_next - qstar_prev)/(qstar_prev + 1.e-8_dbl_kind))**2) > atmiter_conv)
-               if (k > natmiter) then
-                  call icepack_warnings_add('atmo_boundary_layer: flux iteration did not converge')
-                  exit
-               endif
-               k = k + 1
-               ustar_prev = ustar
-               tstar_prev = tstar
-               qstar_prev = qstar
-
-               ! compute stability & evaluate all stability functions
-               holm = compute_stability_parameter(zlvl , thva , &
-                                                ustar, tstar, &
-                                                qstar, Qa, &
-                                                .true.)
-               if (present(zlvs)) then
-                  hols = compute_stability_parameter(zlvs , thva , &
-                                                   ustar, tstar, &
-                                                   qstar, Qa, &
-                                                   .true.)
-               else
-                  hols = holm
-               endif
-
-               call compute_stability_function('momentum', holm, stable, psimh, use_ice_atm_flux_reg, &
-                                             ice_atm_flux_eps)
-               call compute_stability_function('scalar'  , hols, stable, psixh, use_ice_atm_flux_reg, &
-                                             ice_atm_flux_eps)
-
-               ! shift all coeffs to measurement height and stability
-               rd = rdn / (c1+rdn/vonkar*(alzm-psimh))
-               rh = rhn / (c1+rhn/vonkar*(alzs-psixh))
-               re = ren / (c1+ren/vonkar*(alzs-psixh))
-
-               ! update ustar, tstar, qstar using updated, shifted coeffs
-               ustar = ice_atm_flux_damping * rd * vmag + (c1 - ice_atm_flux_damping) * ustar_prev
-               tstar = ice_atm_flux_damping * rh * delt + (c1 - ice_atm_flux_damping) * tstar_prev
-               qstar = ice_atm_flux_damping * re * delq + (c1 - ice_atm_flux_damping) * qstar_prev
-
-               ustar_next = rd * vmag
-               tstar_next = rh * delt
-               qstar_next = re * delq
-            enddo                     ! end iteration
+            call flux_iteration_with_stability(.true., &
+                                               ustar, tstar, qstar, &
+                                               rd, rh, re, &
+                                               hols, psixh, stable)
          endif
       endif
 
@@ -554,6 +423,124 @@
             Qref_iso(n) = Qa_iso(n) - ratio*delq*fac
          enddo
       endif
+
+!=======================================================================
+
+      contains
+
+!=======================================================================
+
+      subroutine flux_iteration_with_stability(use_stability_limiter, &
+                                               ustar, tstar, qstar, &
+                                               rd, rh, re, &
+                                               hols_out, psixh_out, stable_out)
+
+      ! Perform fixed point iteration to solve for atmospheric flux scaling parameters.
+      ! This subroutine implements the fixed point iteration with optional stability limiter.
+
+      logical (kind=log_kind), intent(in) :: &
+         use_stability_limiter  ! if true, use stability limiter in compute_stability_parameter
+
+      real (kind=dbl_kind), intent(inout) :: &
+         ustar, &               ! turbulent scale for momentum (m/s)
+         tstar, &               ! turbulent scale for temperature (K)
+         qstar, &               ! turbulent scale for humidity (kg/kg)
+         rd, &                  ! sqrt of exchange coefficient (momentum)
+         rh, &                  ! sqrt of exchange coefficient (heat)
+         re                     ! sqrt of exchange coefficient (water)
+
+      real (kind=dbl_kind), intent(out) :: &
+         hols_out, &            ! stability parameter at scalar level (for Tref/Qref)
+         psixh_out, &           ! stability function at scalar level (for Tref/Qref)
+         stable_out             ! stability factor (for psix2 calculation)
+
+      ! Local variables
+      integer (kind=int_kind) :: k
+      real (kind=dbl_kind) :: &
+         ustar_prev, tstar_prev, qstar_prev, &
+         ustar_next, tstar_next, qstar_next, &
+         holm, hols, psimh, psixh, stable
+
+      character(len=*),parameter :: subname='(flux_iteration_with_stability)'
+
+      !------------------------------------------------------------
+      ! first estimate of Z/L and ustar, tstar and qstar
+      !------------------------------------------------------------
+
+      ! neutral coefficients, z/L = 0.0
+      rhn = rdn
+      ren = rdn
+
+      ! ustar,tstar,qstar
+      ustar = rdn * vmag
+      tstar = rhn * delt
+      qstar = ren * delq
+
+      !------------------------------------------------------------
+      ! iterate to converge on Z/L, ustar, tstar and qstar
+      !------------------------------------------------------------
+
+      ustar_prev = ustar
+      tstar_prev = tstar
+      qstar_prev = qstar
+      ustar_next = c2 * ustar
+      tstar_next = c2 * tstar
+      qstar_next = c2 * qstar
+
+      k = 1
+      do while ( sqrt(((ustar_next - ustar_prev)/(ustar_prev + 1.e-3_dbl_kind))**2 + &
+                      ((tstar_next - tstar_prev)/(tstar_prev + 1.e-5_dbl_kind))**2 + &
+                      ((qstar_next - qstar_prev)/(qstar_prev + 1.e-8_dbl_kind))**2) > atmiter_conv)
+         if (k > natmiter) then
+            call icepack_warnings_add('atmo_boundary_layer: flux iteration did not converge')
+            exit
+         endif
+         k = k + 1
+         ustar_prev = ustar
+         tstar_prev = tstar
+         qstar_prev = qstar
+
+         ! compute stability & evaluate all stability functions
+         holm = compute_stability_parameter(zlvl , thva , &
+                                          ustar, tstar, &
+                                          qstar, Qa, &
+                                          use_stability_limiter)
+         if (present(zlvs)) then
+            hols = compute_stability_parameter(zlvs , thva , &
+                                             ustar, tstar, &
+                                             qstar, Qa, &
+                                             use_stability_limiter)
+         else
+            hols = holm
+         endif
+
+         call compute_stability_function('momentum', holm, stable, psimh, use_ice_atm_flux_reg, &
+                                         ice_atm_flux_eps)
+         call compute_stability_function('scalar'  , hols, stable, psixh, use_ice_atm_flux_reg, &
+                                         ice_atm_flux_eps)
+
+         ! shift all coeffs to measurement height and stability
+         rd = rdn / (c1+rdn/vonkar*(alzm-psimh))
+         rh = rhn / (c1+rhn/vonkar*(alzs-psixh))
+         re = ren / (c1+ren/vonkar*(alzs-psixh))
+
+         ! update ustar, tstar, qstar using updated, shifted coeffs
+         ustar = ice_atm_flux_damping * rd * vmag + (c1 - ice_atm_flux_damping) * ustar_prev
+         tstar = ice_atm_flux_damping * rh * delt + (c1 - ice_atm_flux_damping) * tstar_prev
+         qstar = ice_atm_flux_damping * re * delq + (c1 - ice_atm_flux_damping) * qstar_prev
+
+         ustar_next = rd * vmag
+         tstar_next = rh * delt
+         qstar_next = re * delq
+
+      enddo                     ! end iteration
+
+      ! Return stability parameters needed for Tref/Qref calculation
+      hols_out = hols
+      psixh_out = psixh
+      stable_out = stable
+
+      end subroutine flux_iteration_with_stability
 
       end subroutine atmo_boundary_layer
 
